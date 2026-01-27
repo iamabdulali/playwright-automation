@@ -64,56 +64,36 @@ async function saveMessagesToSupabase(chatData: any) {
 export async function brightWheelLogin() {
     const browser = await chromium.launch({
         headless: true,
-        args: ["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox",
+         args: ["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox",
     "--disable-setuid-sandbox",]
     });
 
-    // Try to load saved session from Supabase
+      // Try to load saved session from Supabase
     const { data: savedSession } = await supabase
         .from('auth_sessions')
         .select('session_data')
         .eq('service', 'brightwheel')
         .single();
 
-    const context = await browser.newContext({
+  const context = await browser.newContext({
         userAgent:
-            "Mozilla/4.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         // storageState: fs.existsSync(authFile) ? authFile : undefined
         storageState: savedSession?.session_data || undefined
+
     });
 
     const page = await context.newPage();
     await page.goto(SITE_URL, { waitUntil: "networkidle" });
 
-if (page.url().includes('/sign-in')) {
-    let loginAttempts = 0;
-    
-    const attemptLogin = async () => {
+    if (page.url().includes('/sign-in')) {
         await page.fill('input[name="username"]', process.env.BW_EMAIL!);
         await page.fill('input[name="password"]', process.env.BW_PASSWORD!);
+
         await page.getByTestId('sign-in-button').click();
-        loginAttempts++;
-    };
-
-    // Initial login attempt
-    await attemptLogin();
-    console.log('Please solve the CAPTCHA if it appears...');
-
-    // Listen for page load (after CAPTCHA refresh)
-    page.on('load', async () => {
-        if (page.url().includes('/sign-in') && loginAttempts < 3) {
-            console.log('Page refreshed. Re-filling credentials...');
-            await attemptLogin();
-        }
-    });
-
-    // Wait for successful login
-    await page.waitForURL('https://schools.mybrightwheel.com/', { 
-        timeout: 120000 
-    });
-    
-    await page.context().storageState({ path: authFile });
-    const sessionData = await page.context().storageState();
+        await page.waitForURL('https://schools.mybrightwheel.com/');
+        await page.context().storageState({ path: authFile });
+         const sessionData = await page.context().storageState();
         
         await supabase
             .from('auth_sessions')
@@ -122,10 +102,8 @@ if (page.url().includes('/sign-in')) {
                 session_data: sessionData,
                 updated_at: new Date().toISOString()
             });
-    console.log(`Session saved to ${authFile}`);
-        await browser.close()
-
-} else {
+        console.log(`Session saved to ${authFile}`);
+    } else {
         // console.log('Using existing session (cookies)');
         // await page.goto("https://schools.mybrightwheel.com/messages/messages", { waitUntil: "networkidle" });
 
@@ -206,7 +184,6 @@ if (page.url().includes('/sign-in')) {
         });
 
         saveState(newState);
-        await browser.close()
 
     }
 }
