@@ -1,0 +1,36 @@
+# Node.js dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
+
+# Playwright-generated files
+playwright-report/
+*.zip
+auth.json
+test-results/
+
+# TypeScript compiled files
+dist/
+*.tsbuildinfo
+
+# npm debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VSCode files
+.vscode/
+.idea/
+
+# Misc
+*.bak
+*.swp
