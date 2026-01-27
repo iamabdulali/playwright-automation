@@ -55,10 +55,19 @@ export async function parentSquareLogin() {
     "--disable-setuid-sandbox",]
     });
 
+        // Try to load saved session from Supabase
+    const { data: savedSession } = await supabase
+        .from('auth_sessions')
+        .select('session_data')
+        .eq('service', 'parentsquare')
+        .single();
+
     const context = await browser.newContext({
         userAgent:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        storageState: fs.existsSync(authFile) ? authFile : undefined
+        // storageState: fs.existsSync(authFile) ? authFile : undefined
+        storageState: savedSession?.session_data || undefined
+
     });
 
     const page = await context.newPage();
@@ -72,6 +81,15 @@ export async function parentSquareLogin() {
 
         await page.waitForSelector(".sidebar");
         await page.context().storageState({ path: authFile });
+        const sessionData = await page.context().storageState();
+        
+        await supabase
+            .from('auth_sessions')
+            .upsert({
+                service: 'parentsquare',
+                session_data: sessionData,
+                updated_at: new Date().toISOString()
+            });
         console.log(`Session saved to ${authFile}`);
 
         await browser.close()
