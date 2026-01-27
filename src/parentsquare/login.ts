@@ -3,7 +3,7 @@ import path, { dirname } from 'path';
 import { chromium } from 'playwright-extra';
 import fs from 'fs';
 import { loadLastMessageTimes, saveLastMessageTimes } from '../utils/util.ts';
-import { supabase } from '../supabase.ts';
+import { supabase } from '../../supabase.ts';
 
 const URL = "https://www.parentsquare.com/signin";
 
