@@ -1,6 +1,6 @@
-import { brightWheelLogin } from "./src/brightwheel/login.ts";
+import { brightWheelLogin } from "./src/brightwheel/login";
 import dotenv from 'dotenv';
-import { parentSquareLogin } from "./src/parentsquare/login.ts";
+import { parentSquareLogin } from "./src/parentsquare/login";
 dotenv.config();
 
 

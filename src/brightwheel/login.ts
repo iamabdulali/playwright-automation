@@ -3,7 +3,7 @@ import path, { dirname } from 'path';
 import { chromium } from 'playwright-extra';
 import fs from 'fs';
 import dotenv from 'dotenv';
-import { supabase } from '../../supabase.ts';
+import { supabase } from '../../supabase';
 
 dotenv.config();
 
