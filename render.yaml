@@ -1,0 +1,14 @@
+services:
+  - type: cron
+    name: brightwheel-scraper
+    env: docker
+    dockerfilePath: ./Dockerfile
+    schedule: "0 * * * *"  # Every hour
+    envVars:
+      - key: BW_EMAIL
+        sync: false
+      - key: BW_PASSWORD
+        sync: false
+      - key: NODE_ENV
+        value: production
+
