@@ -2,8 +2,8 @@ import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 import { chromium } from 'playwright-extra';
 import fs from 'fs';
-import { loadLastMessageTimes, saveLastMessageTimes } from '../utils/util';
-import { supabase } from '../../supabase';
+import { loadLastMessageTimes, saveLastMessageTimes } from '../utils/util.js';
+import { supabase } from '../../supabase.js';
 
 const URL = "https://www.parentsquare.com/signin";
 
