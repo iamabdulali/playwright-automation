@@ -11,4 +11,10 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
+      - key: PS_EMAIL
+      - key: PS_PASSWORD
+      - key: SUPABASE_URL
+      - key: SUPABASE_KEY
+
+      
 
