@@ -1,7 +1,5 @@
-import { fileURLToPath, URL } from 'url';
-import path, { dirname } from 'path';
+import {  URL } from 'url';
 import { chromium } from 'playwright-extra';
-import fs from 'fs';
 import dotenv from 'dotenv';
 import { supabase } from '../../supabase.js';
 
@@ -9,16 +7,6 @@ dotenv.config();
 
 
 const SITE_URL = "https://schools.mybrightwheel.com/sign-in";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const authFile = path.join(__dirname, 'auth.json');
-let lastMessageIds: Record<string, string> = {};
-const STATE_FILE = path.join(__dirname, 'last_messages.json');
-
-if (fs.existsSync(STATE_FILE)) {
-    lastMessageIds = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
-}
 
 
 // Function to save messages to Supabase
@@ -92,7 +80,6 @@ export async function brightWheelLogin() {
 
         await page.getByTestId('sign-in-button').click();
         await page.waitForURL('https://schools.mybrightwheel.com/');
-        await page.context().storageState({ path: authFile });
          const sessionData = await page.context().storageState();
         
         await supabase
@@ -102,46 +89,8 @@ export async function brightWheelLogin() {
                 session_data: sessionData,
                 updated_at: new Date().toISOString()
             });
-        console.log(`Session saved to ${authFile}`);
+        console.log(`Session saved to Database`);
     } else {
-        // console.log('Using existing session (cookies)');
-        // await page.goto("https://schools.mybrightwheel.com/messages/messages", { waitUntil: "networkidle" });
-
-        // const previousState = loadState();
-        // const isFirstRun = Object.keys(previousState).length === 0;
-
-        // const currentData = await processAllChats(page, previousState, isFirstRun);
-
-        // if (isFirstRun) {
-        //     console.log('\n🎯 First run - baseline set for all chats');
-        // } else {
-        //     // Display summary of new messages
-        //     const chatsWithNewMessages = currentData.filter((chat: any) => chat.newMessages && chat.newMessages.length > 0);
-
-        //     if (chatsWithNewMessages.length > 0) {
-        //         console.log('\n=== NEW MESSAGES SUMMARY ===');
-        //         chatsWithNewMessages.forEach((chat: any) => {
-        //             console.log(`\n📩 ${chat.chatName} (${chat.newMessages.length} new message(s)):`);
-        //             chat.newMessages.forEach((msg: any, idx: number) => {
-        //                 console.log(`   ${idx + 1}. ${msg.sender} at ${msg.timestamp}`);
-        //                 console.log(`      "${msg.content}"`);
-        //             });
-        //         });
-        //     } else {
-        //         console.log('\n✅ No new messages in any chat');
-        //     }
-        // }
-
-        // // Save the updated state
-        // const newState: any = {};
-        // currentData.forEach((chat: any) => {
-        //     newState[chat.threadId] = {
-        //         chatName: chat.chatName,
-        //         lastMessageId: chat.lastMessageId
-        //     };
-        // });
-
-        // saveState(newState);
 
         console.log('Using existing session (cookies)');
         await page.goto("https://schools.mybrightwheel.com/messages/messages", { waitUntil: "networkidle" });
@@ -384,126 +333,54 @@ async function processAllChats(page: any, previousState: any, isFirstRun: boolea
 
     return allChatData;
 }
-// async function getLastReceivedMessage(page: any) {
-//     await page.waitForSelector('[data-testid="thread-container"]', {
-//         timeout: 5000
-//     });
 
-//     // ✅ Handle empty chat
-//     const emptyState = page.locator(
-//         '[data-testid="thread-content-message-list-empty-state"]'
-//     );
+// Load state from Supabase
+async function loadState() {
+    const { data, error } = await supabase
+        .from('brightwheel_chat_state')
+        .select('thread_id, chat_name, last_message_id');
 
-//     if (await emptyState.count() > 0) {
-//         return null;
-//     }
+    if (error) {
+        console.error('❌ Error loading state from Supabase:', error.message);
+        return {};
+    }
 
-//     const allMessages = page.locator(
-//         '[data-testid="thread-content-message-list"] > div[id]'
-//     );
+    // Convert array to object format
+    const state: any = {};
+    if (data) {
+        data.forEach((row) => {
+            state[row.thread_id] = {
+                chatName: row.chat_name,
+                lastMessageId: row.last_message_id
+            };
+        });
+    }
 
-//     const messageCount = await allMessages.count();
-//     console.log(`Total messages in thread: ${messageCount}`);
-
-//     for (let i = messageCount - 1; i >= 0; i--) {
-//         const container = allMessages.nth(i);
-
-//         const className = await container.getAttribute('class');
-//         if (className?.includes('sent-message')) continue;
-
-//         const messageId = await container.getAttribute('id');
-//         if (!messageId) continue;
-
-//         const sender = await container
-//             .locator('.frontend-1ko2gbq p')
-//             .first()
-//             .innerText()
-//             .catch(() => 'Unknown');
-
-//         const timestamp = await container
-//             .locator('.frontend-1ko2gbq p')
-//             .nth(1)
-//             .innerText()
-//             .catch(() => '');
-
-//         const content = await container
-//             .locator('.frontend-1eolz88')
-//             .innerText()
-//             .catch(() => '');
-
-//         return {
-//             id: messageId,
-//             sender,
-//             timestamp,
-//             content: content.trim()
-//         };
-//     }
-
-//     return null;
-// }
-
-// async function processAllChats(page: any) {
-//     const chatRows = page.locator('[data-testid="messages-table"] [role="button"]');
-//     const chatCount = await chatRows.count();
-//     console.log(`Found ${chatCount} chats`);
-
-//     const allChatData = [];
-
-//     for (let i = 0; i < chatCount; i++) {
-//         const currentChatRows = page.locator('[data-testid="messages-table"] [role="button"]');
-//         const row = currentChatRows.nth(i);
-
-//         const chatName = await row
-//             .locator('p')
-//             .first()
-//             .innerText()
-//             .catch(() => `Chat ${i + 1}`);
-
-//         console.log(`\n=== Opening chat ${i + 1}: ${chatName} ===`);
-
-//         // Open the chat
-//         await row.click();
-
-//         await page.waitForSelector('[data-testid="thread-container"]', { state: 'visible', timeout: 5000 });
-//         await page.waitForTimeout(1500); // allow content to load
-
-//         // Get the threadId from URL (most reliable unique identifier)
-//         const url = page.url();
-//         const threadId = new URL(url).searchParams.get('thread') ?? `chat-${i + 1}`;
-
-//         // Get last received message
-//         const lastMessage = await getLastReceivedMessage(page);
-//         console.log({ lastMessage });
-
-//         allChatData.push({
-//             chatIndex: i + 1,
-//             chatName,
-//             threadId,
-//             lastMessage
-//         });
-
-//         // Close chat
-//         const closeButton = page.locator('[data-testid="thread-close-btn"]');
-//         if (await closeButton.isVisible()) {
-//             await closeButton.click();
-//             await page.waitForSelector('[data-testid="thread-container"]', { state: 'hidden', timeout: 5000 });
-//             await page.waitForTimeout(1000);
-//         }
-
-//         await page.waitForTimeout(1000); // extra delay between chats
-//     }
-
-//     return allChatData;
-// }
-
-
-function loadState() {
-    if (!fs.existsSync(STATE_FILE)) return {};
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    return state;
 }
 
-function saveState(state: any) {
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+// Save state to Supabase
+async function saveState(stateData: any) {
+    const records = Object.entries(stateData).map(([threadId, data]: [string, any]) => ({
+        thread_id: threadId,
+        chat_name: data.chatName,
+        last_message_id: data.lastMessageId,
+        updated_at: new Date().toISOString()
+    }));
+
+    if (records.length === 0) {
+        console.log('No state to save');
+        return;
+    }
+
+    const { error } = await supabase
+        .from('brightwheel_chat_state')
+        .upsert(records, { onConflict: 'thread_id' });
+
+    if (error) {
+        console.error('❌ Error saving state to Supabase:', error.message);
+        throw error;
+    }
+
+    console.log(`💾 State saved for ${records.length} chat(s) to Supabase`);
 }
-
-
