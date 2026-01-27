@@ -7,14 +7,14 @@ WORKDIR /app
 # Copy package.json and package-lock.json first for caching
 COPY package*.json ./
 
-# Install all dependencies including devDependencies (ts-node/typescript)
-RUN npm ci
+# Install ALL dependencies including devDependencies
+RUN npm ci --include=dev
 
 # Copy the source code
 COPY . .
 
-# If you have a build script, use npx tsc to build
-RUN npx tsc
+# Build TypeScript
+RUN npm run build
 
 # Use Node to run the compiled JS
 CMD ["node", "dist/index.js"]
