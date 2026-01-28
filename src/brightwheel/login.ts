@@ -49,236 +49,81 @@ async function saveMessagesToSupabase(chatData: any) {
     return { success: true, count: data.length, data };
 }
 
-// export async function brightWheelLogin() {
-//     const browser = await chromium.launch({
-//         headless: true,
-//          args: ["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox",
-//     "--disable-setuid-sandbox",]
-//     });
-
-//       // Try to load saved session from Supabase
-//     const { data: savedSession } = await supabase
-//         .from('auth_sessions')
-//         .select('session_data')
-//         .eq('service', 'brightwheel')
-//         .single();
-
-//   const context = await browser.newContext({
-//         userAgent:
-//             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-//         // storageState: fs.existsSync(authFile) ? authFile : undefined
-//         storageState: savedSession?.session_data || undefined
-
-//     });
-
-//     const page = await context.newPage();
-//     await page.goto(SITE_URL, { waitUntil: "networkidle" });
-
-//     if (page.url().includes('/sign-in')) {
-//         await page.fill('input[name="username"]', process.env.BW_EMAIL!);
-//         await page.fill('input[name="password"]', process.env.BW_PASSWORD!);
-
-//         await page.getByTestId('sign-in-button').click();
-//         await page.waitForURL('https://schools.mybrightwheel.com/');
-//          const sessionData = await page.context().storageState();
-        
-//         await supabase
-//             .from('auth_sessions')
-//             .upsert({
-//                 service: 'brightwheel',
-//                 session_data: sessionData,
-//                 updated_at: new Date().toISOString()
-//             });
-//         console.log(`Session saved to Database`);
-//     } else {
-
-//         console.log('Using existing session (cookies)');
-//         await page.goto("https://schools.mybrightwheel.com/messages/messages", { waitUntil: "networkidle" });
-
-//         const previousState = loadState();
-//         const isFirstRun = Object.keys(previousState).length === 0;
-
-//         const currentData = await processAllChats(page, previousState, isFirstRun);
-
-//         if (isFirstRun) {
-//             console.log('\n🎯 First run - baseline set for all chats');
-//         } else {
-//             // Display summary of new messages
-//             const chatsWithNewMessages = currentData.filter((chat: any) => chat.newMessages && chat.newMessages.length > 0);
-
-//             if (chatsWithNewMessages.length > 0) {
-//                 console.log('\n=== NEW MESSAGES SUMMARY ===');
-//                 chatsWithNewMessages.forEach((chat: any) => {
-//                     console.log(`\n📩 ${chat.chatName} (${chat.newMessages.length} new message(s)):`);
-//                     chat.newMessages.forEach((msg: any, idx: number) => {
-//                         console.log(`   ${idx + 1}. ${msg.sender} at ${msg.timestamp}`);
-//                         console.log(`      "${msg.content}"`);
-//                     });
-//                 });
-
-//                 // 💾 Save new messages to Supabase
-//                 await saveMessagesToSupabase(currentData);
-//             } else {
-//                 console.log('\n✅ No new messages in any chat');
-//             }
-//         }
-
-//         // Save the updated state
-//         const newState: any = {};
-//         currentData.forEach((chat: any) => {
-//             newState[chat.threadId] = {
-//                 chatName: chat.chatName,
-//                 lastMessageId: chat.lastMessageId
-//             };
-//         });
-
-//         saveState(newState);
-//         await browser.close()
-//     }
-// }
-
 export async function brightWheelLogin() {
     const browser = await chromium.launch({
         headless: true,
-        args: [
-            "--start-maximized",
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-            "--disable-setuid-sandbox"
-        ]
+         args: ["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox",
+    "--disable-setuid-sandbox",]
     });
 
-    let context;
-    let page;
+      // Try to load saved session from Supabase
+    const { data: savedSession } = await supabase
+        .from('auth_sessions')
+        .select('session_data')
+        .eq('service', 'brightwheel')
+        .single();
 
-    try {
-        // ─────────────────────────────────────────────────────────────
-        // Load saved session
-        // ─────────────────────────────────────────────────────────────
-        const { data: savedSession } = await supabase
-            .from('auth_sessions')
-            .select('session_data, updated_at')
-            .eq('service', 'brightwheel')
-            .single();
+  const context = await browser.newContext({
+        userAgent:
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        // storageState: fs.existsSync(authFile) ? authFile : undefined
+        storageState: savedSession?.session_data || undefined
 
-        if (!savedSession?.session_data) {
-            throw new Error(
-                '❌ No saved Brightwheel session found. Run refresh script.'
-            );
-        }
+    });
 
-        // Session age check (informational)
-        const sessionAgeMs =
-            Date.now() - new Date(savedSession.updated_at).getTime();
-        const sessionDays = Math.floor(
-            sessionAgeMs / (1000 * 60 * 60 * 24)
-        );
+    const page = await context.newPage();
+    await page.goto(SITE_URL, { waitUntil: "networkidle" });
 
-        console.log(`📅 Brightwheel session age: ${sessionDays} days`);
-        if (sessionDays > 25) {
-            console.warn('⚠️ Session is old — refresh soon');
-        }
+    // if (page.url().includes('/sign-in')) {
+    //     await page.fill('input[name="username"]', process.env.BW_EMAIL!);
+    //     await page.fill('input[name="password"]', process.env.BW_PASSWORD!);
 
-        // ─────────────────────────────────────────────────────────────
-        // Create context with stored session
-        // ─────────────────────────────────────────────────────────────
-        context = await browser.newContext({
-            userAgent:
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            storageState: savedSession.session_data
-        });
+    //     await page.getByTestId('sign-in-button').click();
+    //     await page.waitForURL('https://schools.mybrightwheel.com/');
+    //      const sessionData = await page.context().storageState();
+        
+    //     await supabase
+    //         .from('auth_sessions')
+    //         .upsert({
+    //             service: 'brightwheel',
+    //             session_data: sessionData,
+    //             updated_at: new Date().toISOString()
+    //         });
+    //     console.log(`Session saved to Database`);
+    // } else {
 
-        page = await context.newPage();
+        console.log('Using existing session (cookies)');
+        await page.goto("https://schools.mybrightwheel.com/messages/messages", { waitUntil: "networkidle" });
 
-        // ─────────────────────────────────────────────────────────────
-        // Navigate to main app (never /sign-in)
-        // ─────────────────────────────────────────────────────────────
-        console.log('🔄 Opening Brightwheel...');
-        await page.goto('https://schools.mybrightwheel.com/', {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000
-        });
-
-        // Wait for SPA to settle
-        await page.waitForLoadState('domcontentloaded');
-
-        // ─────────────────────────────────────────────────────────────
-        // AUTH GUARD (DOM-based, not URL-based)
-        // ─────────────────────────────────────────────────────────────
-        const loginFormVisible = await page
-            .locator('input[name="username"]')
-           .isVisible({ timeout: 5000 })
-            .catch(() => false);
-
-        if (loginFormVisible) {
-            throw new Error(
-                '❌ Brightwheel session expired (login form detected)'
-            );
-        }
-
-        console.log('✅ Authenticated via saved session');
-
-        // ─────────────────────────────────────────────────────────────
-        // Navigate to messages
-        // ─────────────────────────────────────────────────────────────
-        await page.goto(
-            'https://schools.mybrightwheel.com/messages/messages',
-            { waitUntil: 'domcontentloaded', timeout: 60000 }
-        );
-
-        // Wait for real UI, not network idle
-        await page.waitForSelector(
-            '[data-testid="chat-threads-container"]',
-            { timeout: 30000 }
-        );
-
-        // ─────────────────────────────────────────────────────────────
-        // Message processing
-        // ─────────────────────────────────────────────────────────────
         const previousState = await loadState();
         const isFirstRun = Object.keys(previousState).length === 0;
 
+        const currentData = await processAllChats(page, previousState, isFirstRun);
+
         if (isFirstRun) {
-            console.log('🎯 First run — setting baseline');
-        }
+            console.log('\n🎯 First run - baseline set for all chats');
+        } else {
+            // Display summary of new messages
+            const chatsWithNewMessages = currentData.filter((chat: any) => chat.newMessages && chat.newMessages.length > 0);
 
-        const currentData = await processAllChats(
-            page,
-            previousState,
-            isFirstRun
-        );
+            if (chatsWithNewMessages.length > 0) {
+                console.log('\n=== NEW MESSAGES SUMMARY ===');
+                chatsWithNewMessages.forEach((chat: any) => {
+                    console.log(`\n📩 ${chat.chatName} (${chat.newMessages.length} new message(s)):`);
+                    chat.newMessages.forEach((msg: any, idx: number) => {
+                        console.log(`   ${idx + 1}. ${msg.sender} at ${msg.timestamp}`);
+                        console.log(`      "${msg.content}"`);
+                    });
+                });
 
-        if (!isFirstRun) {
-            const chatsWithNewMessages = currentData.filter(
-                (chat: any) =>
-                    chat.newMessages && chat.newMessages.length > 0
-            );
-
-            if (chatsWithNewMessages.length) {
-                console.log('\n=== NEW MESSAGES ===');
-                for (const chat of chatsWithNewMessages) {
-                    console.log(
-                        `\n📩 ${chat.chatName} (${chat.newMessages.length})`
-                    );
-                    chat.newMessages.forEach(
-                        (msg: any, i: number) => {
-                            console.log(
-                                `  ${i + 1}. ${msg.sender} @ ${msg.timestamp}`
-                            );
-                            console.log(`     "${msg.content}"`);
-                        }
-                    );
-                }
-
+                // 💾 Save new messages to Supabase
                 await saveMessagesToSupabase(currentData);
             } else {
-                console.log('✅ No new messages');
+                console.log('\n✅ No new messages in any chat');
             }
         }
 
-        // ─────────────────────────────────────────────────────────────
-        // Persist new state
-        // ─────────────────────────────────────────────────────────────
+        // Save the updated state
         const newState: any = {};
         currentData.forEach((chat: any) => {
             newState[chat.threadId] = {
@@ -287,21 +132,10 @@ export async function brightWheelLogin() {
             };
         });
 
-        await saveState(newState);
-
-        console.log('✅ Brightwheel job completed successfully');
-
-    } catch (error) {
-        console.error('❌ Brightwheel job failed:', error);
-        throw error;
-
-    } finally {
-        if (page) await page.close().catch(() => {});
-        if (context) await context.close().catch(() => {});
-        await browser.close();
+        saveState(newState);
+        await browser.close()
     }
-}
-
+// }
 
 async function getMessagesAfter(page: any, afterMessageId: string | null) {
     await page.waitForSelector('[data-testid="thread-container"]', {
