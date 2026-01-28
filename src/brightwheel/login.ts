@@ -133,7 +133,7 @@ export async function brightWheelLogin() {
         });
 
         saveState(newState);
-
+        await browser.close()
     }
 }
 

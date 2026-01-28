@@ -1,15 +1,9 @@
-import { fileURLToPath } from 'url';
-import path, { dirname } from 'path';
 import { chromium } from 'playwright-extra';
-import fs from 'fs';
-import { loadLastMessageTimes, saveLastMessageTimes } from '../utils/util.js';
+// import { loadLastMessageTimes, saveLastMessageTimes } from '../utils/util.js';
 import { supabase } from '../../supabase.js';
 
 const URL = "https://www.parentsquare.com/signin";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const authFile = path.join(__dirname, 'auth.json');
 
 
 // Function to save ParentSquare messages to Supabase
@@ -47,6 +41,54 @@ async function saveParentSquareMessagesToSupabase(messages: any[]) {
     return { success: true, count: data.length, data };
 }
 
+// Load state from Supabase
+async function loadLastMessageTimes(): Promise<Record<string, string>> {
+    const { data, error } = await supabase
+        .from('parentsquare_chat_state')
+        .select('thread_id, last_message_id');
+
+    if (error) {
+        console.error('❌ Error loading ParentSquare state from Supabase:', error.message);
+        return {};
+    }
+
+    const state: Record<string, string> = {};
+    if (data) {
+        data.forEach((row) => {
+            state[row.thread_id] = row.last_message_id;
+        });
+    }
+
+    console.log(`📥 Loaded state for ${Object.keys(state).length} ParentSquare thread(s) from Supabase`);
+    return state;
+}
+
+// Save state to Supabase
+async function saveLastMessageTimes(updatedIds: Record<string, { threadName: string; lastMessageId: string }>) {
+    const records = Object.entries(updatedIds).map(([threadId, data]) => ({
+        thread_id: threadId,
+        thread_name: data.threadName,
+        last_message_id: data.lastMessageId,
+        updated_at: new Date().toISOString()
+    }));
+
+    if (records.length === 0) {
+        console.log('No ParentSquare state to save');
+        return;
+    }
+
+    const { error } = await supabase
+        .from('parentsquare_chat_state')
+        .upsert(records, { onConflict: 'thread_id' });
+
+    if (error) {
+        console.error('❌ Error saving ParentSquare state to Supabase:', error.message);
+        throw error;
+    }
+
+    console.log(`💾 ParentSquare state saved for ${records.length} thread(s) to Supabase`);
+}
+
 
 export async function parentSquareLogin() {
     const browser = await chromium.launch({
@@ -80,7 +122,6 @@ export async function parentSquareLogin() {
         await page.click('input[name="commit"]');
 
         await page.waitForSelector(".sidebar");
-        await page.context().storageState({ path: authFile });
         const sessionData = await page.context().storageState();
         
         await supabase
@@ -90,7 +131,7 @@ export async function parentSquareLogin() {
                 session_data: sessionData,
                 updated_at: new Date().toISOString()
             });
-        console.log(`Session saved to ${authFile}`);
+        console.log(`Session saved to Database`);
 
         await browser.close()
     } else {
@@ -101,9 +142,19 @@ export async function parentSquareLogin() {
         const threads = page.locator('#chat-threads-container a.a-chat-thread');
         const threadCount = await threads.count();
 
-        const lastMessageIds = loadLastMessageTimes();
+        // const lastMessageIds = loadLastMessageTimes();
+        // const newMessages = [];
+        // const updatedIds: Record<string, string> = {};
+
+         const lastMessageIds = await loadLastMessageTimes();
+        const isFirstRun = Object.keys(lastMessageIds).length === 0;
+
+        if (isFirstRun) {
+            console.log('🎯 First run detected - will set baseline for all threads');
+        }
+
         const newMessages = [];
-        const updatedIds: Record<string, string> = {};
+        const updatedIds: Record<string, { threadName: string; lastMessageId: string }> = {};
 
         for (let i = 0; i < threadCount; i++) {
             const thread = threads.nth(i);
@@ -138,15 +189,32 @@ export async function parentSquareLogin() {
             let foundLastStored = !lastStoredId; // first run → true
             let latestReceivedId: string | null = null;
 
-            // FIRST RUN → only store last received ID
+            // // FIRST RUN → only store last received ID
+            // if (!lastStoredId) {
+            //     latestReceivedId = await receivedBubbles
+            //         .nth(receivedCount - 1)
+            //         .getAttribute('id');
+
+            //     if (latestReceivedId) {
+            //         updatedIds[threadId] = latestReceivedId;
+            //         console.log(`First run for ${threadName}, stored ${latestReceivedId}`);
+            //     }
+
+            //     continue;
+            // }
+
+              // FIRST RUN → only store last received ID
             if (!lastStoredId) {
                 latestReceivedId = await receivedBubbles
                     .nth(receivedCount - 1)
                     .getAttribute('id');
 
                 if (latestReceivedId) {
-                    updatedIds[threadId] = latestReceivedId;
-                    console.log(`First run for ${threadName}, stored ${latestReceivedId}`);
+                    updatedIds[threadId] = {
+                        threadName: threadName || threadId,
+                        lastMessageId: latestReceivedId
+                    };
+                    console.log(`📍 Setting baseline - Last message ID: ${latestReceivedId}`);
                 }
 
                 continue;
@@ -207,16 +275,34 @@ export async function parentSquareLogin() {
                 latestReceivedId = messageId;
             }
 
-            if (latestReceivedId) {
-                updatedIds[threadId] = latestReceivedId;
-                console.log(`New received messages in ${threadName}`);
+        //     if (latestReceivedId) {
+        //         updatedIds[threadId] = latestReceivedId;
+        //         console.log(`New received messages in ${threadName}`);
+        //     } else {
+        //         updatedIds[threadId] = lastStoredId;
+        //         console.log(`No new received messages in ${threadName}`);
+        //     }
+        // }
+
+        // saveLastMessageTimes(updatedIds);
+
+        if (latestReceivedId) {
+                updatedIds[threadId] = {
+                    threadName: threadName || threadId,
+                    lastMessageId: latestReceivedId
+                };
+                const threadNewMessages = newMessages.filter(m => m.threadId === threadId);
+                console.log(`📩 Found ${threadNewMessages.length} new message(s)`);
             } else {
-                updatedIds[threadId] = lastStoredId;
-                console.log(`No new received messages in ${threadName}`);
+                updatedIds[threadId] = {
+                    threadName: threadName || threadId,
+                    lastMessageId: lastStoredId
+                };
+                console.log(`✅ No new messages`);
             }
         }
 
-        saveLastMessageTimes(updatedIds);
+        await saveLastMessageTimes(updatedIds);
 
         console.log('All new received messages:', newMessages);
         console.log(`Total new received messages: ${newMessages.length}`);
