@@ -1,13 +1,10 @@
 import { chromium } from 'playwright-extra';
-// import { loadLastMessageTimes, saveLastMessageTimes } from '../utils/util.js';
 import { supabase } from '../../supabase.js';
 
 const URL = "https://www.parentsquare.com/signin";
 
-
-
 // Function to save ParentSquare messages to Supabase
-async function saveParentSquareMessagesToSupabase(messages: any[]) {
+async function saveParentSquareMessagesToSupabase(messages: ParentSquareMessages[]) {
     if (messages.length === 0) {
         console.log('📭 No new ParentSquare messages to save to database');
         return { success: true, count: 0 };
@@ -21,10 +18,8 @@ async function saveParentSquareMessagesToSupabase(messages: any[]) {
         message_text: msg.message,
         timestamp: msg.time,
         from_user: msg.from,
-        // We don't have threadId and messageId in the current structure
-        // You might need to pass these from the main loop
-        thread_id: msg.threadId || msg.thread, // fallback to thread name
-        message_id: msg.messageId || `${msg.thread}-${Date.now()}` // generate if not available
+        thread_id: msg.threadId || msg.thread,
+        message_id: msg.messageId || `${msg.thread}-${Date.now()}`
     }));
 
     const { data, error } = await supabase
@@ -92,12 +87,12 @@ async function saveLastMessageTimes(updatedIds: Record<string, { threadName: str
 
 export async function parentSquareLogin() {
     const browser = await chromium.launch({
-           headless: true,
+        headless: true,
         args: ["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox",
-    "--disable-setuid-sandbox",]
+            "--disable-setuid-sandbox",]
     });
 
-        // Try to load saved session from Supabase
+    // Try to load saved session from Supabase
     const { data: savedSession } = await supabase
         .from('auth_sessions')
         .select('session_data')
@@ -107,7 +102,6 @@ export async function parentSquareLogin() {
     const context = await browser.newContext({
         userAgent:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        // storageState: fs.existsSync(authFile) ? authFile : undefined
         storageState: savedSession?.session_data || undefined
 
     });
@@ -123,7 +117,7 @@ export async function parentSquareLogin() {
 
         await page.waitForSelector(".sidebar");
         const sessionData = await page.context().storageState();
-        
+
         await supabase
             .from('auth_sessions')
             .upsert({
@@ -142,18 +136,14 @@ export async function parentSquareLogin() {
         const threads = page.locator('#chat-threads-container a.a-chat-thread');
         const threadCount = await threads.count();
 
-        // const lastMessageIds = loadLastMessageTimes();
-        // const newMessages = [];
-        // const updatedIds: Record<string, string> = {};
-
-         const lastMessageIds = await loadLastMessageTimes();
+        const lastMessageIds = await loadLastMessageTimes();
         const isFirstRun = Object.keys(lastMessageIds).length === 0;
 
         if (isFirstRun) {
             console.log('🎯 First run detected - will set baseline for all threads');
         }
 
-        const newMessages = [];
+        const newMessages:ParentSquareMessages[] = [];
         const updatedIds: Record<string, { threadName: string; lastMessageId: string }> = {};
 
         for (let i = 0; i < threadCount; i++) {
@@ -186,24 +176,10 @@ export async function parentSquareLogin() {
             }
 
             const lastStoredId = lastMessageIds[threadId];
-            let foundLastStored = !lastStoredId; // first run → true
+            let foundLastStored = !lastStoredId;
             let latestReceivedId: string | null = null;
 
-            // // FIRST RUN → only store last received ID
-            // if (!lastStoredId) {
-            //     latestReceivedId = await receivedBubbles
-            //         .nth(receivedCount - 1)
-            //         .getAttribute('id');
-
-            //     if (latestReceivedId) {
-            //         updatedIds[threadId] = latestReceivedId;
-            //         console.log(`First run for ${threadName}, stored ${latestReceivedId}`);
-            //     }
-
-            //     continue;
-            // }
-
-              // FIRST RUN → only store last received ID
+            // FIRST RUN → only store last received ID
             if (!lastStoredId) {
                 latestReceivedId = await receivedBubbles
                     .nth(receivedCount - 1)
@@ -264,9 +240,9 @@ export async function parentSquareLogin() {
                 }
 
                 newMessages.push({
-                    threadId: threadId,      // ✅ Added
-                    messageId: messageId,     // ✅ Added
-                    thread: threadName,
+                    threadId: threadId,
+                    messageId: messageId,
+                    thread: threadName || `Thread_${messageId}`,
                     message: messageText.trim(),
                     time: timestamp.trim(),
                     from: 'other'
@@ -275,18 +251,7 @@ export async function parentSquareLogin() {
                 latestReceivedId = messageId;
             }
 
-        //     if (latestReceivedId) {
-        //         updatedIds[threadId] = latestReceivedId;
-        //         console.log(`New received messages in ${threadName}`);
-        //     } else {
-        //         updatedIds[threadId] = lastStoredId;
-        //         console.log(`No new received messages in ${threadName}`);
-        //     }
-        // }
-
-        // saveLastMessageTimes(updatedIds);
-
-        if (latestReceivedId) {
+            if (latestReceivedId) {
                 updatedIds[threadId] = {
                     threadName: threadName || threadId,
                     lastMessageId: latestReceivedId

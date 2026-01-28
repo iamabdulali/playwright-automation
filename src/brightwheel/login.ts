@@ -2,6 +2,8 @@ import {  URL } from 'url';
 import { chromium } from 'playwright-extra';
 import dotenv from 'dotenv';
 import { supabase } from '../../supabase.js';
+import { loadStateForBrightWheel, saveStateForBrightWheel } from '../utils/util.js';
+import { Page } from 'playwright/test.js';
 
 dotenv.config();
 
@@ -10,7 +12,7 @@ const SITE_URL = "https://schools.mybrightwheel.com/sign-in";
 
 
 // Function to save messages to Supabase
-async function saveMessagesToSupabase(chatData: any) {
+async function saveMessagesToSupabase(chatData: BrightWheelsChatData[]) {
     const messagesToInsert = [];
 
     for (const chat of chatData) {
@@ -95,7 +97,7 @@ export async function brightWheelLogin() {
         console.log('Using existing session (cookies)');
         await page.goto("https://schools.mybrightwheel.com/messages/messages", { waitUntil: "networkidle" });
 
-        const previousState = await loadState();
+        const previousState = await loadStateForBrightWheel();
         const isFirstRun = Object.keys(previousState).length === 0;
 
         const currentData = await processAllChats(page, previousState, isFirstRun);
@@ -132,12 +134,12 @@ export async function brightWheelLogin() {
             };
         });
 
-        saveState(newState);
+        saveStateForBrightWheel(newState);
         await browser.close()
     }
 // }
 
-async function getMessagesAfter(page: any, afterMessageId: string | null) {
+async function getMessagesAfter(page: Page, afterMessageId: string | null) {
     await page.waitForSelector('[data-testid="thread-container"]', {
         timeout: 5000
     });
@@ -155,7 +157,7 @@ async function getMessagesAfter(page: any, afterMessageId: string | null) {
     );
 
     const messageCount = await allMessages.count();
-    const newMessages = [];
+    const newMessages: BrightWheelsNewMessages[] = [];
     let foundStoredMessage = afterMessageId === null;
 
     for (let i = 0; i < messageCount; i++) {
@@ -202,7 +204,7 @@ async function getMessagesAfter(page: any, afterMessageId: string | null) {
     return newMessages;
 }
 
-async function getLastReceivedMessage(page: any) {
+async function getLastReceivedMessage(page: Page) {
     await page.waitForSelector('[data-testid="thread-container"]', {
         timeout: 5000
     });
@@ -259,12 +261,12 @@ async function getLastReceivedMessage(page: any) {
     return null;
 }
 
-async function processAllChats(page: any, previousState: any, isFirstRun: boolean) {
+async function processAllChats(page: Page, previousState: any, isFirstRun: boolean) {
     const chatRows = page.locator('[data-testid="messages-table"] [role="button"]');
     const chatCount = await chatRows.count();
     console.log(`Found ${chatCount} chats`);
 
-    const allChatData = [];
+    const allChatData: BrightWheelsChatData[] = [];
 
     for (let i = 0; i < chatCount; i++) {
         const currentChatRows = page.locator('[data-testid="messages-table"] [role="button"]');
@@ -285,7 +287,7 @@ async function processAllChats(page: any, previousState: any, isFirstRun: boolea
         const url = page.url();
         const threadId = new URL(url).searchParams.get('thread') ?? `chat-${i + 1}`;
 
-        let chatData: any = {
+        let chatData: BrightWheelsChatData = {
             chatIndex: i + 1,
             chatName,
             threadId,
@@ -334,53 +336,3 @@ async function processAllChats(page: any, previousState: any, isFirstRun: boolea
     return allChatData;
 }
 
-// Load state from Supabase
-async function loadState() {
-    const { data, error } = await supabase
-        .from('brightwheel_chat_state')
-        .select('thread_id, chat_name, last_message_id');
-
-    if (error) {
-        console.error('❌ Error loading state from Supabase:', error.message);
-        return {};
-    }
-
-    // Convert array to object format
-    const state: any = {};
-    if (data) {
-        data.forEach((row) => {
-            state[row.thread_id] = {
-                chatName: row.chat_name,
-                lastMessageId: row.last_message_id
-            };
-        });
-    }
-
-    return state;
-}
-
-// Save state to Supabase
-async function saveState(stateData: any) {
-    const records = Object.entries(stateData).map(([threadId, data]: [string, any]) => ({
-        thread_id: threadId,
-        chat_name: data.chatName,
-        last_message_id: data.lastMessageId,
-        updated_at: new Date().toISOString()
-    }));
-
-    if (records.length === 0) {
-        console.log('No state to save');
-        return;
-    }
-
-    const { error } = await supabase
-        .from('brightwheel_chat_state')
-        .upsert(records, { onConflict: 'thread_id' });
-
-    if (error) {
-        console.error('❌ Error saving state to Supabase:', error.message);
-        throw error;
-    }
-
-    console.log(`💾 State saved for ${records.length} chat(s) to Supabase`);
-}

@@ -1,24 +1,31 @@
-import fs from 'fs'
-import path, { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { supabase } from "../../supabase.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const STORAGE_FILE = path.join(__dirname, 'last_messages.json');
 
-// Load previous last message IDs
-export function loadLastMessageTimes(): Record<string, string> {
-    try {
-        if (fs.existsSync(STORAGE_FILE)) {
-            return JSON.parse(fs.readFileSync(STORAGE_FILE, 'utf-8'));
-        }
-    } catch (error) {
-        console.error('Error loading last message times:', error);
-    }
-    return {};
-}
+export async function saveStateForBrightWheel(
+  stateData: BrightWheelStateMap
+): Promise<void> {
+  const records: BrightWheelChatStateRow[] = Object.entries(stateData).map(
+    ([threadId, data]) => ({
+      thread_id: threadId,
+      chat_name: data.chatName,
+      last_message_id: data.lastMessageId,
+      updated_at: new Date().toISOString()
+    })
+  );
 
-// Save current last message IDs
-export function saveLastMessageTimes(times: Record<string, string>) {
-    fs.writeFileSync(STORAGE_FILE, JSON.stringify(times, null, 2));
+  if (records.length === 0) {
+    console.log("No state to save");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("brightwheel_chat_state")
+    .upsert(records, { onConflict: "thread_id" });
+
+  if (error) {
+    console.error("❌ Error saving state to Supabase:", error.message);
+    throw error;
+  }
+
+  console.log(`💾 State saved for ${records.length} chat(s) to Supabase`);
 }
