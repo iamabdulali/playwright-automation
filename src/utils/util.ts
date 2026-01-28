@@ -29,3 +29,25 @@ export async function saveStateForBrightWheel(
 
   console.log(`💾 State saved for ${records.length} chat(s) to Supabase`);
 }
+
+export async function loadStateForBrightWheel(): Promise<BrightWheelStateMap> {
+  const { data, error } = await supabase
+    .from("brightwheel_chat_state")
+    .select("thread_id, chat_name, last_message_id");
+
+  if (error) {
+    console.error("❌ Error loading state from Supabase:", error.message);
+    return {};
+  }
+
+  const state: BrightWheelStateMap = {};
+
+  data?.forEach((row) => {
+    state[row.thread_id] = {
+      chatName: row.chat_name,
+      lastMessageId: row.last_message_id
+    };
+  });
+
+  return state;
+}
