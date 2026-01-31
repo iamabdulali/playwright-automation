@@ -33,13 +33,29 @@ async function main() {
   try {
     console.log("🚀 Cron job started");
 
-    await runWithRetry(brightWheelLogin, "BrightWheel Login");
-    await runWithRetry(parentSquareLogin, "ParentSquare Login");
+    // Run both jobs independently in parallel
+    const results = await Promise.allSettled([
+      runWithRetry(brightWheelLogin, "BrightWheel Login"),
+      runWithRetry(parentSquareLogin, "ParentSquare Login")
+    ]);
+
+    // Check if any failed
+    const failures = results.filter(r => r.status === 'rejected');
+    
+    if (failures.length > 0) {
+      console.error(`💥 ${failures.length} job(s) failed`);
+      failures.forEach((failure, index) => {
+        if (failure.status === 'rejected') {
+          console.error(`  - Job ${index + 1}:`, failure.reason);
+        }
+      });
+      process.exit(1);
+    }
 
     console.log("🎉 All cron jobs completed successfully");
     process.exit(0);
   } catch (error) {
-    console.error("💥 Cron job failed", error);
+    console.error("💥 Unexpected error", error);
     process.exit(1);
   }
 }
