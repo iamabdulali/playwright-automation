@@ -65,6 +65,10 @@ export async function brightWheelLogin() {
         .eq('service', 'brightwheel')
         .single();
 
+        if(!savedSession){
+            throw new Error("Session Not Found! Login Please")
+        }
+
   const context = await browser.newContext({
         userAgent:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -94,7 +98,6 @@ export async function brightWheelLogin() {
     //     console.log(`Session saved to Database`);
     // } else {
 
-        console.log('Using existing session (cookies)');
         await page.goto("https://schools.mybrightwheel.com/messages/messages", { waitUntil: "networkidle" });
 
         const previousState = await loadStateForBrightWheel();
