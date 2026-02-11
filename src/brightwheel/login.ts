@@ -376,7 +376,19 @@ async function processAllChats(
       .innerText()
       .catch(() => `Chat ${i + 1}`);
 
-    console.log(`\n=== Opening chat ${i + 1}: ${chatName} ===`);
+    // Extract badge text if present (e.g., "Parent ⇆ Admin")
+    const badgeText = await row
+      .locator(".p5d1pd9._1o8hwfm0")
+      .innerText()
+      .catch(() => "");
+
+    // Create unique ID: chatName + badge (or "direct" if no badge)
+    const threadId = `${chatName.replace(/\s/g, "-")}-${badgeText || "direct"}`;
+
+    console.log(
+      `\n=== Opening chat ${i + 1}: ${chatName} ${badgeText ? `[${badgeText}]` : "[Direct]"} ===`,
+    );
+    console.log(`Thread ID: ${threadId}`);
 
     await row.click();
     await page.waitForSelector('[data-testid="thread-container"]', {
@@ -385,34 +397,17 @@ async function processAllChats(
     });
     await page.waitForTimeout(1500);
 
-    const url = page.url();
-    let threadId = new URL(url).searchParams.get("thread");
-
-    // Fallback: if no thread ID in URL, generate one from chat metadata
-    if (!threadId) {
-      console.warn(
-        `⚠️ No thread ID found in URL for ${chatName}, using fallback`,
-      );
-      // Use avatar URL or badge as fallback identifier
-      const avatarUrl = await row
-        .locator('[data-testid="user-avatar"]')
-        .getAttribute("style");
-      const uniqueId = avatarUrl
-        ? avatarUrl.match(/images\/(\d+\/\d+\/\d+)/)?.[1]
-        : null;
-      threadId = uniqueId || `fallback-${chatName.replace(/\s/g, "-")}`;
-    }
-
     let chatData: BrightWheelsChatData = {
       chatIndex: i + 1,
       chatName,
-      threadId: threadId!, // Non-null assertion since we have fallback
+      threadId,
+      badge: badgeText || null,
       newMessages: [],
       lastMessageId: null,
     };
 
     // Check if this chat exists in previous state
-    const chatExistsInState = previousState[threadId!] !== undefined;
+    const chatExistsInState = previousState[threadId] !== undefined;
 
     if (isFirstRun || !chatExistsInState) {
       // First run OR new chat: just get and store the last message ID as baseline
@@ -424,7 +419,7 @@ async function processAllChats(
       chatData.lastMessageId = lastMessage?.id ?? null;
     } else {
       // Existing chat on subsequent run: get all new messages
-      const storedMessageId = previousState[threadId!].lastMessageId;
+      const storedMessageId = previousState[threadId].lastMessageId;
       const newMessages = await getMessagesAfter(page, storedMessageId);
 
       if (newMessages.length > 0) {
